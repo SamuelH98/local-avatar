@@ -1,0 +1,7 @@
+checkpoints
+.env
+.git
+tests
+*.zip
+*.log
+__pycache__

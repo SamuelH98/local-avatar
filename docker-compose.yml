@@ -1,0 +1,42 @@
+# Local Companion. Start it with:  python3 start.py   (do not run docker compose by hand unless you know why)
+name: companion
+
+x-gpu: &gpu
+  deploy:
+    resources:
+      reservations:
+        devices: [{driver: nvidia, count: 1, capabilities: [gpu]}]
+
+services:
+  # The whole app: web page + face + voice + setup. Reachable only from this computer.
+  app:
+    build: {context: ., dockerfile: Dockerfile}
+    image: companion:latest
+    container_name: companion
+    restart: unless-stopped
+    <<: *gpu
+    ports: ["127.0.0.1:${APP_PORT:-8080}:8790"]
+    volumes: ["./checkpoints:/ditto/ditto-talkinghead/checkpoints"]   # downloaded models live here, outside the image
+    extra_hosts: ["host.docker.internal:host-gateway"]                # only needed if OLLAMA_URL points at an Ollama on this computer
+    environment:
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility,video
+      OLLAMA_URL: ${OLLAMA_URL:-http://ollama:11434}
+      CHAT_MODEL: ${CHAT_MODEL:-qwen2.5:1.5b}
+      VISION_MODEL: ${VISION_MODEL-moondream}                         # empty = vision off
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request as u;u.urlopen('http://127.0.0.1:8790/api/status',timeout=3)"]
+      interval: 15s
+      retries: 5
+
+  # The chat engine. It has no published port, so it can never clash with an Ollama you already run on :11434.
+  # start.py leaves it out when .env points OLLAMA_URL at your own Ollama.
+  ollama:
+    profiles: ["bundled-ollama"]
+    image: ollama/ollama:latest
+    container_name: companion-ollama
+    restart: unless-stopped
+    <<: *gpu
+    volumes: ["ollama:/root/.ollama"]
+
+volumes:
+  ollama: {}
